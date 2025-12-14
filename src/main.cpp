@@ -1,5 +1,5 @@
 #include <Arduino.h>
-
+#include "com.h"
 // put function declarations here:
 int myFunction(int, int);
 
