@@ -1,0 +1,19 @@
+{
+  "name": "ipc",
+  "version": "1.0.0",
+  "description": "Inter-Process Communication library",
+  "keywords": ["ipc", "communication", "embedded"],
+  "authors": [
+    {
+      "name": "Your Name",
+      "email": "your@email.com"
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}
