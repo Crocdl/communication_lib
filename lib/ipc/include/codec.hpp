@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <utility>
 #include "./cobs.hpp"
 
 namespace ipc {

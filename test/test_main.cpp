@@ -20,7 +20,6 @@ void tearDown(void) {
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     
-    
     // Основные тесты
     RUN_TEST(test_cobs_basic);
     RUN_TEST(test_crc_basic);
@@ -28,7 +27,7 @@ int main(int argc, char **argv) {
     
     // Тесты IPCLink
     RUN_TEST(test_ipc_link_debug);
-    // RUN_TEST(test_ipc_link_basic);
+    RUN_TEST(test_ipc_link_basic);
     RUN_TEST(test_ipc_link_empty_message);
     RUN_TEST(test_ipc_link_large_message);
     
