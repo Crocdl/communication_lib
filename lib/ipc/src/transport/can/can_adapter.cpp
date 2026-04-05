@@ -1,9 +1,11 @@
 #include "../include/adapters/can_adapter.hpp"
-#include "../include/logger.hpp"
+#include "../../../include/utils/logger.hpp"
 
 // STM32 HAL headers
 #ifdef STM32G4
 #include "main.h"
+#else
+
 #endif
 
 namespace ipc {
@@ -245,7 +247,6 @@ bool CANAdapter::is_rx_buffer_empty_() const noexcept {
 
 void CANAdapter::push_rx_message_(const RxMessage& msg) noexcept {
     if (is_rx_buffer_full_()) {
-        LOG_WARN("CAN RX buffer full, dropping message");
         return;
     }
 
@@ -304,10 +305,10 @@ void CANAdapter::handle_rx_fifo1_() noexcept {
 }
 
 void CANAdapter::handle_error_() noexcept {
-    uint32_t errors = HAL_CAN_GetError(hcan_);
-    if (errors != HAL_CAN_ERROR_NONE) {
-        LOG_ERROR("CAN error: 0x%x", errors);
-    }
+    // uint32_t errors = HAL_CAN_GetError(hcan_);
+    // if (errors != HAL_CAN_ERROR_NONE) {
+    //     LOG_ERROR("CAN error: 0x%x", errors);
+    // }
 }
 
 // Static callback implementations

@@ -7,6 +7,8 @@
 // STM32 HAL include
 #ifdef STM32G4
 #include "main.h"
+#else 
+#include "mock_adapters/mock_uart_adapter.hpp"
 #endif
 
 namespace ipc {

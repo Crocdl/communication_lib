@@ -4,11 +4,8 @@
 #include <HardwareSerial.h>
 #include <Arduino.h> 
 #else
-#include "../../test/moks/HardwareSerial.h"
-#include "../../test/moks/CriticalSectionStub.h"
-#define SERIAL_8N1 1
+
 #endif
-// Внешняя переменная для глобального доступа к экземпляру адаптера (опционально).
 
 namespace ipc {
 

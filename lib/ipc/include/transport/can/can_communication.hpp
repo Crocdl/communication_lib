@@ -69,7 +69,7 @@ private:
         // CAN ID format: [2 bits type][7 bits source][7 bits dest][16 bits reserved]
         // This allows routing without master-slave hierarchy
         static uint32_t encode_id(uint8_t src, uint8_t dst, MessageType type) noexcept {
-            return (static_cast<uint32_t>(type & 0x03) << 22) |
+            return (static_cast<uint32_t>(static_cast<uint8_t>(type) & 0x03) << 22) |
                    (static_cast<uint32_t>(src & 0x7F) << 15) |
                    (static_cast<uint32_t>(dst & 0x7F) << 8);
         }

@@ -1,5 +1,5 @@
 #include "../include/transport_layer.hpp"
-#include "../include/logger.hpp"
+#include "../../include/utils/logger.hpp"
 
 namespace ipc {
 
@@ -132,8 +132,9 @@ bool MasterNode::send_packet_to_slave_(uint8_t slave_addr, const Packet& pkt) no
 
     // Serialize and send packet through adapter
     // This will be integrated with the codec layer
-    LOG_INFO("Master sending packet to slave 0x%02X, type=0x%02X", 
-             slave_addr, static_cast<byte>(pkt.header.type));
+    LOG_INFO("Master sending packet to slave");
+    // LOG_INFO("Master sending packet to slave 0x%02X, type=0x%02X", 
+    //          slave_addr, static_cast<byte>(pkt.header.type));
     
     // Placeholder - actual serialization handled by codec layer
     return true;
@@ -142,7 +143,6 @@ bool MasterNode::send_packet_to_slave_(uint8_t slave_addr, const Packet& pkt) no
 void MasterNode::handle_slave_response_(const Packet& response) noexcept {
     PendingRequest* pending = find_pending_request_(response.header.seq_id);
     if (pending) {
-        LOG_INFO("Received response to request seq_id=0x%02X", response.header.seq_id);
         pending->is_active = false;
     }
 
@@ -156,8 +156,6 @@ void MasterNode::check_request_timeouts_(uint32_t current_time_ms) noexcept {
         if (pending_requests_[i].is_active) {
             uint32_t elapsed = current_time_ms - pending_requests_[i].timestamp_ms;
             if (elapsed > config_.request_timeout_ms) {
-                LOG_WARN("Request timeout for slave 0x%02X, seq_id=0x%02X", 
-                        pending_requests_[i].slave_address, pending_requests_[i].seq_id);
                 pending_requests_[i].is_active = false;
             }
         }
@@ -232,7 +230,6 @@ bool SlaveNode::init(const TransportConfig& config) noexcept {
 
     config_ = config;
     is_initialized_ = true;
-    LOG_INFO("Slave node initialized with address 0x%02X", config.node_address);
     return true;
 }
 
@@ -275,7 +272,6 @@ void SlaveNode::handle_state_request_(const Packet& request) noexcept {
             state_len
         );
         send_response_to_master_(response);
-        LOG_INFO("Sent state response for state_id=0x%02X", state_id);
     }
 }
 
@@ -305,7 +301,6 @@ void SlaveNode::handle_command_request_(const Packet& request) noexcept {
         response_len
     );
     send_response_to_master_(response);
-    LOG_INFO("Executed command 0x%02X, status=0x%02X", cmd_id, static_cast<byte>(status));
 }
 
 bool SlaveNode::send_state_update(uint8_t state_id, const byte* state_data, size_t state_data_len) noexcept {
@@ -322,7 +317,6 @@ bool SlaveNode::send_state_update(uint8_t state_id, const byte* state_data, size
     );
     
     send_response_to_master_(pkt);
-    LOG_INFO("Sent unsolicited state update for state_id=0x%02X", state_id);
     return true;
 }
 
@@ -333,8 +327,6 @@ void SlaveNode::send_response_to_master_(const Packet& response) noexcept {
 
     // Serialize and send packet through adapter
     // This will be integrated with the codec layer
-    LOG_INFO("Slave sending response packet, type=0x%02X", 
-             static_cast<byte>(response.header.type));
 
     if (packet_cb_) {
         packet_cb_(response, packet_ctx_);
@@ -354,7 +346,6 @@ void SlaveNode::send_heartbeat_() noexcept {
     );
     
     send_response_to_master_(pkt);
-    LOG_DEBUG("Sent heartbeat");
 }
 
 } // namespace ipc

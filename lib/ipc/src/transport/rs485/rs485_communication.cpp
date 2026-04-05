@@ -1,5 +1,5 @@
 #include "../include/rs485_communication.hpp"
-#include "../include/logger.hpp"
+#include "../../../include/utils/logger.hpp"
 
 namespace ipc {
 
@@ -32,8 +32,6 @@ bool RS485Communication::init(const Config& config) noexcept {
     }, this);
 
     is_initialized_ = true;
-    LOG_INFO("RS485Communication initialized: device_id=0x%02X, role=%s", 
-             config.device_id, config.role == Role::kMaster ? "master" : "slave");
     return true;
 }
 
@@ -113,7 +111,6 @@ bool RS485Communication::is_ready() const noexcept {
 void RS485Communication::handle_service_packet_(const byte* data, size_t len) noexcept {
     // Service packets (heartbeat, ack, nak) are handled internally
     // Not exposed to user
-    LOG_DEBUG("Service packet received (len=%u)", len);
 }
 
 void RS485Communication::handle_user_message_(const byte* data, size_t len) noexcept {
@@ -187,7 +184,6 @@ void RS485Communication::master_check_timeouts_(uint32_t now) noexcept {
     for (size_t i = 0; i < sizeof(pending_requests_) / sizeof(pending_requests_[0]); ++i) {
         if (pending_requests_[i].is_active) {
             if (now - pending_requests_[i].timestamp > config_.request_timeout_ms) {
-                LOG_WARN("Request timeout for slave 0x%02X", pending_requests_[i].slave_addr);
                 pending_requests_[i].is_active = false;
             }
         }
@@ -196,7 +192,6 @@ void RS485Communication::master_check_timeouts_(uint32_t now) noexcept {
 
 void RS485Communication::slave_send_heartbeat_() noexcept {
     // Send heartbeat to master (service protocol, hidden from user)
-    LOG_DEBUG("Slave: sending heartbeat");
 }
 
 void RS485Communication::slave_process_requests_(uint32_t now) noexcept {

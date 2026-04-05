@@ -1,5 +1,5 @@
 #include "../include/can_communication.hpp"
-#include "../include/logger.hpp"
+#include "../../../include/utils/logger.hpp"
 
 namespace ipc {
 
@@ -27,8 +27,9 @@ bool CANCommunication::init(const Config& config) noexcept {
     }, this);
 
     is_initialized_ = true;
-    LOG_INFO("CANCommunication initialized: device_id=0x%02X, bitrate=%u kbps",
-             config.device_id, config.nominal_bitrate / 1000);
+    LOG_INFO("CANCommunication initialized");
+    // LOG_INFO("CANCommunication initialized: device_id=0x%02X, bitrate=%u kbps",
+    //          config.device_id, config.nominal_bitrate / 1000);
     return true;
 }
 
@@ -59,9 +60,6 @@ bool CANCommunication::send_message(const Message& msg) noexcept {
         LOG_ERROR("CAN send failed");
         return false;
     }
-
-    LOG_DEBUG("CAN message sent: src=0x%02X, dst=0x%02X, type=0x%02X, len=%u",
-             msg.source_id, msg.dest_id, static_cast<byte>(msg.type), msg.payload_size);
     return true;
 }
 

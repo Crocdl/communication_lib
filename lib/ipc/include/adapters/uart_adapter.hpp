@@ -2,13 +2,10 @@
 #define IPC_UART_ADAPTER_HPP
 
 #include "../transport_adapter.hpp"
-#ifndef PLATFORM_NATIVE
-// Реальный код для ESP32
+#ifdef ESP32
 #include <HardwareSerial.h>
 #else
-#include "../../test/moks/HardwareSerial.h"
-#include "../../test/moks/CriticalSectionStub.h"
-
+#include "./mock_adapters/mock_hardwareSerial_adapter.hpp"
 #endif
 namespace ipc {
 
@@ -40,8 +37,7 @@ private:
     void* ctx_;
     byte buffer_[BUFFER_SIZE];
     volatile int bufferHead_;
-    volatile int bufferTail_;
-    portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED; // Для синхронизации в прерываниях.
+    volatile int bufferTail_; // Для синхронизации в прерываниях.
 };
 
 } // namespace ipc

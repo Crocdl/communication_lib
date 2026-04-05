@@ -1,6 +1,5 @@
 #include "../include/adapters/rs485_adapter.hpp"
-#include "../include/logger.hpp"
-
+#include "../../../include/utils/logger.hpp"
 namespace ipc {
 
 // Initialize static instance pointer
@@ -114,7 +113,6 @@ void RS485Adapter::assert_de_() noexcept {
     HAL_GPIO_WritePin(PORT_DE_RE, GPIO_PIN_DE_RE, GPIO_PIN_SET);
     #endif
     de_state_ = true;
-    LOG_DEBUG("DE asserted");
 }
 
 void RS485Adapter::deassert_de_() noexcept {
@@ -123,7 +121,6 @@ void RS485Adapter::deassert_de_() noexcept {
     HAL_GPIO_WritePin(PORT_DE_RE, GPIO_PIN_DE_RE, GPIO_PIN_RESET);
     #endif
     de_state_ = false;
-    LOG_DEBUG("DE deasserted");
 }
 
 void RS485Adapter::enable_rx_() noexcept {
@@ -160,8 +157,6 @@ void RS485Adapter::tx_complete_callback_(UART_HandleTypeDef* huart) {
         if (HAL_UART_Receive_IT(huart, instance_->rx_buffer_, 1) != HAL_OK) {
             LOG_ERROR("Failed to re-enable RX after TX");
         }
-        
-        LOG_DEBUG("TX complete, DE deasserted");
     }
 }
 
