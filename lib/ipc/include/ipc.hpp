@@ -107,13 +107,6 @@ public:
                 return false;
             }
 
-            // Frame delimiter for byte-stream transports (UART/RS485).
-            // cobs_encode() in this project returns encoded payload without trailing 0x00.
-            if (enc_len >= sizeof(encoded)) {
-                return false;
-            }
-            encoded[enc_len++] = 0x00;
-
             size_t sent = adapter_->send(encoded, enc_len);
             if (sent == enc_len) {
                 stats_.frames_sent++;
@@ -156,7 +149,7 @@ private:
     static constexpr size_t kLengthPrefixSize = 2;
     enum : size_t { 
         RawPayloadBufSize = MaxPayload + sizeof(typename CRC_t::value_type),
-        EncBufSize = RawPayloadBufSize + (RawPayloadBufSize / 254) + 6  // +1 for 0x00 delimiter
+        EncBufSize = RawPayloadBufSize + (RawPayloadBufSize / 254) + 5
     };
     enum : size_t {
         RawFrameBufSize = RawPayloadBufSize + kLengthPrefixSize
