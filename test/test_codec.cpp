@@ -20,7 +20,7 @@ size_t out_len = 0;
 ipc::DecodeError err = ipc::DecodeError::None;
 
 
-bool ok = ipc::decode_frame<CRC>(encoded, enc_len, decoded, sizeof(decoded), &out_len, &err);
+bool ok = ipc::decode_frame<CRC>(encoded, enc_len -1, decoded, sizeof(decoded), &out_len, &err);
 TEST_ASSERT_TRUE(ok);
 TEST_ASSERT_EQUAL(sizeof(payload), out_len);
 TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, decoded, sizeof(payload));

@@ -44,7 +44,7 @@ public:
             
             // Проверяем окончание кадра (0x00 для COBS)
             if (b == 0x00 && rx_idx_ > 1) {
-                handle_complete_frame(rx_buf_, rx_idx_);
+                handle_complete_frame(rx_buf_, rx_idx_-1);
                 rx_idx_ = 0;
             }
         } else {
@@ -70,7 +70,6 @@ public:
         if (enc_len == 0) {
             return false;
         }
-        
         size_t sent = adapter_->send(encoded, enc_len);
         if (sent == enc_len) {
             stats_.frames_sent++;

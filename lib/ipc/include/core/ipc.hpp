@@ -15,7 +15,7 @@ class ITransportAdapter;
 
 using RecvCallback = void(*)(const byte*, size_t, void*);
 
-struct Stats {
+struct Stats { // statistic 
     uint32_t frames_received = 0;
     uint32_t frames_sent     = 0;
     uint32_t crc_errors      = 0;
@@ -26,7 +26,7 @@ struct Stats {
 template <size_t MaxPayload, typename CRC_t>
 class IPCLink {
 public:
-    IPCLink(ITransportAdapter* adapter, RecvCallback cb, void* user_ctx = nullptr) noexcept
+    IPCLink(ITransportAdapter* adapter, RecvCallback cb, void* user_ctx = nullptr) noexcept // user_ctx - для передачи контекста в callback
         : adapter_(adapter), cb_(cb), user_ctx_(user_ctx), rx_idx_(0) 
     {
         stats_ = Stats();

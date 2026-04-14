@@ -71,10 +71,12 @@ public:
             std::cout << "ERROR: rx_handler is null!\n";
             return;
         }
-        
+        std::cout << "RX_handler get ";
         for (size_t i = 0; i < len; ++i) {
             rx_handler(data[i], rx_ctx);
+            std::cout<<"|"<< static_cast<int>(data[i]);
         }
+        std::cout<<"|\n";
     }
 
     void feed_rx(const std::vector<byte>& data) {

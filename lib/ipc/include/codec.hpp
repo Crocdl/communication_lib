@@ -51,7 +51,7 @@ size_t encode_frame(const byte* payload, size_t payload_len,
     if (enc_len == 0) {
         return 0;
     }
-
+    out[enc_len++] = 0x00;
     return enc_len;
 }
 
