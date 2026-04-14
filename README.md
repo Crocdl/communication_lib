@@ -143,12 +143,64 @@ adapter.init(cfg);
 // ...
 ```
 
+### Вариант 3: IPCLink с конфигурацией кодека под транспорт
+
+`IPCLink` теперь поддерживает конфигурацию фрейминга:
+- **UART/RS485**: `COBS + CRC` (режим по умолчанию)
+- **CAN FD**: `Length-prefixed` без `COBS/CRC`
+- **Manual mode**: можно включать/выключать `COBS`, `CRC` и `Length prefix` вручную
+
+```cpp
+#include "ipc.hpp"
+#include "crc.hpp"
+
+using UARTLink = ipc::IPCLink<64, ipc::CRC16_CCITT>;
+
+void on_uart_data(const uint8_t* data, size_t len, void* ctx) {
+    // обработка полезной нагрузки
+}
+
+UARTLink::Config uart_cfg = UARTLink::Config::for_uart();   // можно не задавать: default
+UARTLink uart_link(&uart_adapter, on_uart_data, nullptr, uart_cfg);
+uart_link.send(payload, payload_len);
+uart_link.process();
+```
+
+```cpp
+#include "ipc.hpp"
+#include "crc.hpp"
+
+using CANFDLink = ipc::IPCLink<64, ipc::CRC16_CCITT>;
+
+void on_can_data(const uint8_t* data, size_t len, void* ctx) {
+    // обработка полезной нагрузки CAN FD
+}
+
+CANFDLink::Config can_cfg = CANFDLink::Config::for_can_fd();
+CANFDLink can_link(&can_adapter, on_can_data, nullptr, can_cfg);
+can_link.send(payload, payload_len); // отправит: [len_hi][len_lo][payload]
+can_link.process();
+```
+
+```cpp
+// Ручной режим (пример): UART с COBS, но без CRC
+using CustomLink = ipc::IPCLink<64, ipc::CRC16_CCITT>;
+CustomLink::Config manual_cfg = CustomLink::Config::manual(
+    true,   // use_cobs
+    false,  // use_crc
+    false   // use_length_prefix
+);
+
+CustomLink custom_link(&uart_adapter, on_uart_data, nullptr, manual_cfg);
+```
+
 ## 📚 Документация
 
 | Документ | Назначение |
 |----------|-----------|
 | [QUICK_START.md](QUICK_START.md) | **Начните отсюда!** Примеры кода и таблицы |
 | [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | Полное руководство интеграции в STM32 проект |
+| [IPC_SERVICE_PACKET_CONFIG.md](IPC_SERVICE_PACKET_CONFIG.md) | Настройка ACK/heartbeat/инфо-пакетов на уровне приложения |
 | [lib/ipc/TRANSPORT_PROTOCOL.md](lib/ipc/TRANSPORT_PROTOCOL.md) | Описание протокола и архитектуры |
 | [lib/ipc/PACKET_DEFINITIONS.md](lib/ipc/PACKET_DEFINITIONS.md) | Детальное описание каждого типа пакета |
 
