@@ -96,3 +96,55 @@ void test_ipc_link_large_message() {
     TEST_ASSERT_FALSE_MESSAGE(send_result, 
                              "send() with too large message should return false");
 }
+
+void test_ipc_link_can_fd_mode_without_crc_cobs() {
+    reset_test_state();
+
+    test::MockTransport transport;
+    Link::Config cfg = Link::Config::for_can_fd();
+    Link link(&transport, on_rx, nullptr, cfg);
+
+    const ipc::byte msg[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    bool send_result = link.send(msg, sizeof(msg));
+    TEST_ASSERT_TRUE_MESSAGE(send_result, "send() in CAN FD mode should return true");
+
+    const std::vector<ipc::byte>& tx = transport.tx_data();
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg) + 2, tx.size(),
+                              "CAN FD frame should contain 2-byte length prefix + payload");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0x00, tx[0], "High byte of length should be 0");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(sizeof(msg), tx[1], "Low byte of length should match payload");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(msg, tx.data() + 2, sizeof(msg),
+                                         "Payload in CAN FD mode should be raw without codec");
+
+    transport.feed_rx(tx);
+    link.process();
+
+    TEST_ASSERT_TRUE_MESSAGE(rx_called, "RX callback should be called in CAN FD mode");
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg), rx_len, "RX length should match in CAN FD mode");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(msg, rx_buf, sizeof(msg),
+                                         "RX payload should match in CAN FD mode");
+}
+
+void test_ipc_link_manual_mode_cobs_without_crc() {
+    reset_test_state();
+
+    test::MockTransport transport;
+    Link::Config cfg = Link::Config::manual(true, false, false);
+    Link link(&transport, on_rx, nullptr, cfg);
+
+    const ipc::byte msg[] = {0x10, 0x20, 0x00, 0x40}; // содержит 0x00 для проверки COBS
+    bool send_result = link.send(msg, sizeof(msg));
+    TEST_ASSERT_TRUE_MESSAGE(send_result, "send() in manual COBS mode should return true");
+
+    const std::vector<ipc::byte>& tx = transport.tx_data();
+    TEST_ASSERT_FALSE_MESSAGE(tx.empty(), "TX in manual COBS mode should not be empty");
+
+    // loopback в этот же link
+    transport.feed_rx(tx);
+    link.process();
+
+    TEST_ASSERT_TRUE_MESSAGE(rx_called, "RX callback should be called in manual COBS mode");
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg), rx_len, "RX length should match in manual COBS mode");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(msg, rx_buf, sizeof(msg),
+                                         "RX payload should match in manual COBS mode");
+}
