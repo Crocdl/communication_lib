@@ -4,7 +4,7 @@
 namespace ipc {
 
 RS485Communication::RS485Communication(ITransportAdapter* adapter) noexcept
-    : adapter_(adapter), msg_callback_(nullptr), msg_callback_ctx_(nullptr),
+    : adapter_(adapter), link_(nullptr), msg_callback_(nullptr), msg_callback_ctx_(nullptr),
       state_handler_(nullptr), state_handler_ctx_(nullptr),
       cmd_handler_(nullptr), cmd_handler_ctx_(nullptr),
       is_initialized_(false), last_heartbeat_time_(0), next_seq_id_(0) {
@@ -15,6 +15,7 @@ RS485Communication::RS485Communication(ITransportAdapter* adapter) noexcept
 }
 
 RS485Communication::~RS485Communication() noexcept {
+    delete link_;
 }
 
 bool RS485Communication::init(const Config& config) noexcept {
@@ -25,11 +26,13 @@ bool RS485Communication::init(const Config& config) noexcept {
 
     config_ = config;
 
-    // Setup RX callback to receive all bytes
-    adapter_->set_rx_handler([](byte b, void* ctx) {
-        // Single byte handler - will be integrated with codec layer
-        // This is placeholder for frame reception
-    }, this);
+    delete link_;
+    link_ = nullptr;
+    link_ = new Link(adapter_, &RS485Communication::on_link_payload_, this, Link::Config::for_uart());
+    if (!link_) {
+        LOG_ERROR("Failed to create IPCLink");
+        return false;
+    }
 
     is_initialized_ = true;
     return true;
@@ -49,16 +52,23 @@ bool RS485Communication::send_message(const Message& msg) noexcept {
     // - Slaves receive and respond
     // - User just sends messages, transport layer handles the protocol
 
+    byte raw[Message::kMaxPayloadSize + 5];
+    size_t raw_len = 0;
+    if (!encode_message_payload_(msg, raw, sizeof(raw), &raw_len)) {
+        return false;
+    }
+
+    if (!link_ || !link_->send(raw, raw_len)) {
+        return false;
+    }
+
     if (config_.role == Role::kMaster) {
-        // Master sends to slave
         if (msg.type == MessageType::kState_Request) {
             master_send_state_request_(msg.dest_id, msg.payload, msg.payload_size);
         } else if (msg.type == MessageType::kCommand_Execute) {
             master_send_command_(msg.dest_id, msg.payload, msg.payload_size);
         }
     } else {
-        // Slave sends to master (or other slaves via master)
-        // Response messages are sent through the service protocol
         slave_send_response_(msg.dest_id, msg);
     }
 
@@ -83,9 +93,8 @@ void RS485Communication::poll(uint32_t current_time_ms) noexcept {
         slave_process_requests_(current_time_ms);
     }
 
-    // Poll adapter for incoming data
-    if (adapter_) {
-        adapter_->poll();
+    if (link_) {
+        link_->process();
     }
 }
 
@@ -114,24 +123,23 @@ void RS485Communication::handle_service_packet_(const byte* data, size_t len) no
 }
 
 void RS485Communication::handle_user_message_(const byte* data, size_t len) noexcept {
-    // User message received, parse and call callback
-    if (len < 4) {
+    if (!data || len < 5) {
         return;  // Invalid
+    }
+
+    const size_t payload_len = (static_cast<size_t>(data[3]) << 8) | data[4];
+    if (payload_len + 5 != len || payload_len > Message::kMaxPayloadSize) {
+        return;
     }
 
     Message msg;
     msg.source_id = data[0];
     msg.dest_id = data[1];
     msg.type = static_cast<MessageType>(data[2]);
-    
-    size_t payload_len = (len > 4) ? len - 4 : 0;
-    if (payload_len > Message::kMaxPayloadSize) {
-        payload_len = Message::kMaxPayloadSize;
-    }
-    
+
     msg.payload_size = payload_len;
     if (payload_len > 0) {
-        std::memcpy(msg.payload, &data[3], payload_len);
+        std::memcpy(msg.payload, &data[5], payload_len);
     }
 
     // Check if this message is for us or broadcast
@@ -201,6 +209,40 @@ void RS485Communication::slave_process_requests_(uint32_t now) noexcept {
 void RS485Communication::slave_send_response_(uint8_t master_addr, const Message& msg) noexcept {
     // Send response to master (or master sends to other slaves)
     LOG_INFO("Slave: sending response to 0x%02X, type=0x%02X", master_addr, static_cast<byte>(msg.type));
+}
+
+bool RS485Communication::encode_message_payload_(const Message& msg, byte* out, size_t out_cap, size_t* out_len) noexcept {
+    if (!out || !out_len || msg.payload_size > Message::kMaxPayloadSize) {
+        return false;
+    }
+
+    const size_t total_len = msg.payload_size + 5;
+    if (total_len > out_cap) {
+        return false;
+    }
+
+    out[0] = msg.source_id;
+    out[1] = msg.dest_id;
+    out[2] = static_cast<byte>(msg.type);
+    out[3] = static_cast<byte>((msg.payload_size >> 8) & 0xFF);
+    out[4] = static_cast<byte>(msg.payload_size & 0xFF);
+    if (msg.payload_size > 0) {
+        std::memcpy(out + 5, msg.payload, msg.payload_size);
+    }
+
+    *out_len = total_len;
+    return true;
+}
+
+void RS485Communication::handle_raw_payload_(const byte* data, size_t len) noexcept {
+    handle_user_message_(data, len);
+}
+
+void RS485Communication::on_link_payload_(const byte* data, size_t len, void* ctx) noexcept {
+    if (!ctx) {
+        return;
+    }
+    static_cast<RS485Communication*>(ctx)->handle_raw_payload_(data, len);
 }
 
 } // namespace ipc

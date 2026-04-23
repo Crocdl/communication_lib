@@ -4,13 +4,14 @@
 namespace ipc {
 
 CANCommunication::CANCommunication(ITransportAdapter* adapter) noexcept
-    : adapter_(adapter), msg_callback_(nullptr), msg_callback_ctx_(nullptr),
+    : adapter_(adapter), link_(nullptr), msg_callback_(nullptr), msg_callback_ctx_(nullptr),
       state_handler_(nullptr), state_handler_ctx_(nullptr),
       cmd_handler_(nullptr), cmd_handler_ctx_(nullptr),
       is_initialized_(false) {
 }
 
 CANCommunication::~CANCommunication() noexcept {
+    delete link_;
 }
 
 bool CANCommunication::init(const Config& config) noexcept {
@@ -21,10 +22,13 @@ bool CANCommunication::init(const Config& config) noexcept {
 
     config_ = config;
 
-    // Setup RX callback
-    adapter_->set_rx_handler([](byte b, void* ctx) {
-        // CAN adapter handles frame reception
-    }, this);
+    delete link_;
+    link_ = nullptr;
+    link_ = new Link(adapter_, &CANCommunication::on_link_payload_, this, Link::Config::for_can_fd());
+    if (!link_) {
+        LOG_ERROR("Failed to create IPCLink");
+        return false;
+    }
 
     is_initialized_ = true;
     LOG_INFO("CANCommunication initialized");
@@ -42,25 +46,13 @@ bool CANCommunication::send_message(const Message& msg) noexcept {
         return false;
     }
 
-    // Convert user message to CAN frame
-    // All devices are equal in CAN - no master-slave hierarchy
-    CANFrame frame;
-    frame.can_id = CANFrame::encode_id(msg.source_id, msg.dest_id, msg.type);
-    
-    // First byte is message type, followed by payload
-    frame.data[0] = static_cast<byte>(msg.type);
-    frame.dlc = (msg.payload_size > 63) ? 64 : msg.payload_size + 1;
-    
-    if (msg.payload_size > 0) {
-        std::memcpy(&frame.data[1], msg.payload, msg.payload_size);
-    }
-
-    // Send through adapter
-    if (adapter_->send(frame.data, frame.dlc) == 0) {
-        LOG_ERROR("CAN send failed");
+    byte raw[Message::kMaxPayloadSize + 5];
+    size_t raw_len = 0;
+    if (!encode_message_payload_(msg, raw, sizeof(raw), &raw_len)) {
         return false;
     }
-    return true;
+
+    return link_ ? link_->send(raw, raw_len) : false;
 }
 
 void CANCommunication::poll(uint32_t current_time_ms) noexcept {
@@ -68,9 +60,8 @@ void CANCommunication::poll(uint32_t current_time_ms) noexcept {
         return;
     }
 
-    // Poll adapter for incoming frames
-    if (adapter_) {
-        adapter_->poll();
+    if (link_) {
+        link_->process();
     }
 
     process_received_frame_();
@@ -96,8 +87,59 @@ bool CANCommunication::is_ready() const noexcept {
 }
 
 void CANCommunication::process_received_frame_() noexcept {
-    // Implementation: read from adapter and decode frames
-    // This would be integrated with the codec layer
+    // RX is handled by IPCLink callback on_link_payload_.
+}
+
+bool CANCommunication::encode_message_payload_(const Message& msg, byte* out, size_t out_cap, size_t* out_len) noexcept {
+    if (!out || !out_len || msg.payload_size > Message::kMaxPayloadSize) {
+        return false;
+    }
+
+    const size_t total_len = msg.payload_size + 5;
+    if (total_len > out_cap) {
+        return false;
+    }
+
+    out[0] = msg.source_id;
+    out[1] = msg.dest_id;
+    out[2] = static_cast<byte>(msg.type);
+    out[3] = static_cast<byte>((msg.payload_size >> 8) & 0xFF);
+    out[4] = static_cast<byte>(msg.payload_size & 0xFF);
+    if (msg.payload_size > 0) {
+        std::memcpy(out + 5, msg.payload, msg.payload_size);
+    }
+
+    *out_len = total_len;
+    return true;
+}
+
+void CANCommunication::handle_raw_payload_(const byte* data, size_t len) noexcept {
+    if (!data || len < 5) {
+        return;
+    }
+
+    const size_t payload_len = (static_cast<size_t>(data[3]) << 8) | data[4];
+    if (payload_len + 5 != len || payload_len > Message::kMaxPayloadSize) {
+        return;
+    }
+
+    Message msg;
+    msg.source_id = data[0];
+    msg.dest_id = data[1];
+    msg.type = static_cast<MessageType>(data[2]);
+    msg.payload_size = payload_len;
+    if (payload_len > 0) {
+        std::memcpy(msg.payload, data + 5, payload_len);
+    }
+
+    handle_incoming_message_(msg);
+}
+
+void CANCommunication::on_link_payload_(const byte* data, size_t len, void* ctx) noexcept {
+    if (!ctx) {
+        return;
+    }
+    static_cast<CANCommunication*>(ctx)->handle_raw_payload_(data, len);
 }
 
 void CANCommunication::handle_incoming_message_(const Message& msg) noexcept {

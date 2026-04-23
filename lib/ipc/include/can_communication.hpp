@@ -3,6 +3,8 @@
 
 #include "communication_layer.hpp"
 #include "transport_adapter.hpp"
+#include "ipc.hpp"
+#include "crc.hpp"
 #include <cstdint>
 
 #ifdef STM32G4
@@ -49,7 +51,10 @@ public:
     bool is_ready() const noexcept override;
 
 private:
+    using Link = IPCLink<Message::kMaxPayloadSize + 5, CRC16_CCITT>;
+
     ITransportAdapter* adapter_;
+    Link* link_;
     Config config_;
     MessageRecvCallback msg_callback_;
     void* msg_callback_ctx_;
@@ -61,26 +66,9 @@ private:
     bool is_initialized_;
 
     // CAN frame format for user protocol
-    struct CANFrame {
-        uint32_t can_id;       // CAN ID encoding source + dest + type
-        uint8_t dlc;           // Data length
-        uint8_t data[64];      // Payload
-        
-        // CAN ID format: [2 bits type][7 bits source][7 bits dest][16 bits reserved]
-        // This allows routing without master-slave hierarchy
-        static uint32_t encode_id(uint8_t src, uint8_t dst, MessageType type) noexcept {
-            return (static_cast<uint32_t>(static_cast<uint8_t>(type) & 0x03) << 22) |
-                   (static_cast<uint32_t>(src & 0x7F) << 15) |
-                   (static_cast<uint32_t>(dst & 0x7F) << 8);
-        }
-        
-        static void decode_id(uint32_t can_id, uint8_t& src, uint8_t& dst, uint8_t& type) noexcept {
-            type = (can_id >> 22) & 0x03;
-            src = (can_id >> 15) & 0x7F;
-            dst = (can_id >> 8) & 0x7F;
-        }
-    };
-
+    bool encode_message_payload_(const Message& msg, byte* out, size_t out_cap, size_t* out_len) noexcept;
+    void handle_raw_payload_(const byte* data, size_t len) noexcept;
+    static void on_link_payload_(const byte* data, size_t len, void* ctx) noexcept;
     void process_received_frame_() noexcept;
     void handle_incoming_message_(const Message& msg) noexcept;
 };

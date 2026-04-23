@@ -3,6 +3,8 @@
 
 #include "communication_layer.hpp"
 #include "transport_adapter.hpp"
+#include "ipc.hpp"
+#include "crc.hpp"
 #include <cstdint>
 
 #ifdef STM32G4
@@ -51,7 +53,10 @@ public:
     bool is_slave() const noexcept { return config_.role == Role::kSlave; }
 
 private:
+    using Link = IPCLink<Message::kMaxPayloadSize + 5, CRC16_CCITT>;
+
     ITransportAdapter* adapter_;
+    Link* link_;
     Config config_;
     MessageRecvCallback msg_callback_;
     void* msg_callback_ctx_;
@@ -76,6 +81,9 @@ private:
     // Service protocol handling (hidden from user)
     void handle_service_packet_(const byte* data, size_t len) noexcept;
     void handle_user_message_(const byte* data, size_t len) noexcept;
+    bool encode_message_payload_(const Message& msg, byte* out, size_t out_cap, size_t* out_len) noexcept;
+    void handle_raw_payload_(const byte* data, size_t len) noexcept;
+    static void on_link_payload_(const byte* data, size_t len, void* ctx) noexcept;
     
     // Master operations
     void master_send_state_request_(uint8_t slave_addr, const byte* data, size_t len) noexcept;

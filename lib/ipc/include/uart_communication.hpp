@@ -3,6 +3,8 @@
 
 #include "communication_layer.hpp"
 #include "transport_adapter.hpp"
+#include "ipc.hpp"
+#include "crc.hpp"
 #include <cstdint>
 
 #ifdef STM32G4
@@ -37,7 +39,10 @@ public:
     bool is_ready() const noexcept override;
 
 private:
+    using Link = IPCLink<Message::kMaxPayloadSize + 5, CRC16_CCITT>;
+
     ITransportAdapter* adapter_;
+    Link* link_;
     Config config_;
     MessageRecvCallback msg_callback_;
     void* msg_callback_ctx_;
@@ -55,14 +60,9 @@ private:
     static constexpr uint8_t kSOP = 0x7E;   // Start of packet
     static constexpr uint8_t kEOP = 0x00;   // End of packet
 
-    struct UARTFrame {
-        uint8_t src_id;
-        uint8_t dst_id;
-        uint8_t msg_type;
-        uint16_t length;
-        uint8_t payload[Message::kMaxPayloadSize];
-    };
-
+    bool encode_message_payload_(const Message& msg, byte* out, size_t out_cap, size_t* out_len) noexcept;
+    void handle_raw_payload_(const byte* data, size_t len) noexcept;
+    static void on_link_payload_(const byte* data, size_t len, void* ctx) noexcept;
     void process_received_frame_() noexcept;
     void handle_incoming_message_(const Message& msg) noexcept;
 };
