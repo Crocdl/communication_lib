@@ -4,13 +4,14 @@
 namespace ipc {
 
 UARTCommunication::UARTCommunication(ITransportAdapter* adapter) noexcept
-    : adapter_(adapter), msg_callback_(nullptr), msg_callback_ctx_(nullptr),
+    : adapter_(adapter), link_(nullptr), msg_callback_(nullptr), msg_callback_ctx_(nullptr),
       state_handler_(nullptr), state_handler_ctx_(nullptr),
       cmd_handler_(nullptr), cmd_handler_ctx_(nullptr),
       is_initialized_(false) {
 }
 
 UARTCommunication::~UARTCommunication() noexcept {
+    delete link_;
 }
 
 bool UARTCommunication::init(const Config& config) noexcept {
@@ -21,10 +22,13 @@ bool UARTCommunication::init(const Config& config) noexcept {
 
     config_ = config;
 
-    // Setup RX callback
-    adapter_->set_rx_handler([](byte b, void* ctx) {
-        // UART adapter handles byte reception
-    }, this);
+    delete link_;
+    link_ = nullptr;
+    link_ = new Link(adapter_, &UARTCommunication::on_link_payload_, this, Link::Config::for_uart());
+    if (!link_) {
+        LOG_ERROR("Failed to create IPCLink");
+        return false;
+    }
 
     is_initialized_ = true;
     return true;
@@ -39,14 +43,13 @@ bool UARTCommunication::send_message(const Message& msg) noexcept {
         return false;
     }
 
-    // Format frame: [SOP] [SRC] [DST] [TYPE] [LEN_H] [LEN_L] [PAYLOAD...] [CRC_H] [CRC_L] [EOP]
-    // All devices are equal - no hierarchy
-    
-    if (adapter_->send(msg.payload, msg.payload_size) == 0) {
-        LOG_ERROR("UART send failed");
+    byte raw[Message::kMaxPayloadSize + 5];
+    size_t raw_len = 0;
+    if (!encode_message_payload_(msg, raw, sizeof(raw), &raw_len)) {
         return false;
     }
-    return true;
+
+    return link_ ? link_->send(raw, raw_len) : false;
 }
 
 void UARTCommunication::poll(uint32_t current_time_ms) noexcept {
@@ -54,9 +57,8 @@ void UARTCommunication::poll(uint32_t current_time_ms) noexcept {
         return;
     }
 
-    // Poll adapter for incoming data
-    if (adapter_) {
-        adapter_->poll();
+    if (link_) {
+        link_->process();
     }
 
     process_received_frame_();
@@ -82,8 +84,60 @@ bool UARTCommunication::is_ready() const noexcept {
 }
 
 void UARTCommunication::process_received_frame_() noexcept {
-    // Implementation: read from adapter and decode frames
-    // This would be integrated with the codec layer
+    // RX is handled by IPCLink callback on_link_payload_.
+}
+
+bool UARTCommunication::encode_message_payload_(const Message& msg, byte* out, size_t out_cap, size_t* out_len) noexcept {
+    if (!out || !out_len || msg.payload_size > Message::kMaxPayloadSize) {
+        return false;
+    }
+
+    const size_t total_len = msg.payload_size + 5;
+    if (total_len > out_cap) {
+        return false;
+    }
+
+    out[0] = msg.source_id;
+    out[1] = msg.dest_id;
+    out[2] = static_cast<byte>(msg.type);
+    out[3] = static_cast<byte>((msg.payload_size >> 8) & 0xFF);
+    out[4] = static_cast<byte>(msg.payload_size & 0xFF);
+
+    if (msg.payload_size > 0) {
+        std::memcpy(out + 5, msg.payload, msg.payload_size);
+    }
+
+    *out_len = total_len;
+    return true;
+}
+
+void UARTCommunication::handle_raw_payload_(const byte* data, size_t len) noexcept {
+    if (!data || len < 5) {
+        return;
+    }
+
+    const size_t payload_len = (static_cast<size_t>(data[3]) << 8) | data[4];
+    if (payload_len + 5 != len || payload_len > Message::kMaxPayloadSize) {
+        return;
+    }
+
+    Message msg;
+    msg.source_id = data[0];
+    msg.dest_id = data[1];
+    msg.type = static_cast<MessageType>(data[2]);
+    msg.payload_size = payload_len;
+    if (payload_len > 0) {
+        std::memcpy(msg.payload, data + 5, payload_len);
+    }
+
+    handle_incoming_message_(msg);
+}
+
+void UARTCommunication::on_link_payload_(const byte* data, size_t len, void* ctx) noexcept {
+    if (!ctx) {
+        return;
+    }
+    static_cast<UARTCommunication*>(ctx)->handle_raw_payload_(data, len);
 }
 
 void UARTCommunication::handle_incoming_message_(const Message& msg) noexcept {
