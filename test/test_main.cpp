@@ -10,6 +10,9 @@ void test_ipc_link_empty_message();
 void test_ipc_link_large_message();
 void test_ipc_link_can_fd_mode_without_crc_cobs();
 void test_ipc_link_manual_mode_cobs_without_crc();
+void test_ipc_link_can_fd_fragmentation_reassembles_large_payload();
+void test_ipc_link_tx_queue_flushes_on_process();
+void test_ipc_link_rx_queue_without_callback();
 
 void setUp(void) {
     // Инициализация
@@ -34,6 +37,9 @@ int main(int argc, char **argv) {
     RUN_TEST(test_ipc_link_large_message);
     RUN_TEST(test_ipc_link_can_fd_mode_without_crc_cobs);
     RUN_TEST(test_ipc_link_manual_mode_cobs_without_crc);
+    RUN_TEST(test_ipc_link_can_fd_fragmentation_reassembles_large_payload);
+    RUN_TEST(test_ipc_link_tx_queue_flushes_on_process);
+    RUN_TEST(test_ipc_link_rx_queue_without_callback);
     
     return UNITY_END();
 }

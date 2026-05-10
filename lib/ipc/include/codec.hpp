@@ -37,8 +37,7 @@ size_t encode_frame(const byte* payload, size_t payload_len,
     const size_t crc_size = sizeof(crc_value);
     const size_t raw_len = payload_len + crc_size;
     
-    // Временный буфер на стеке (можно сделать динамически для больших данных)
-    byte raw_buf[256];
+    byte raw_buf[512];
     if (raw_len > sizeof(raw_buf)) {
         return 0; // Слишком большой пакет
     }
@@ -70,7 +69,7 @@ bool decode_frame(const byte* enc, size_t enc_len,
     }
 
     // 1. Декодируем COBS
-    byte decoded[256];  // временный буфер
+    byte decoded[512];
     size_t decoded_len = cobs_decode(enc, enc_len, decoded, sizeof(decoded));
     if (decoded_len == 0) {
         if (err) *err = DecodeError::MalformedCOBS;

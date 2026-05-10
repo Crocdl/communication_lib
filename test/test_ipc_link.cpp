@@ -7,7 +7,7 @@ using Link = ipc::IPCLink<64, ipc::CRC16_CCITT>;
 
 // Глобальные переменные для проверки приема
 static bool rx_called = false;
-static uint8_t rx_buf[64];
+static uint8_t rx_buf[256];
 static size_t rx_len = 0;
 
 static void on_rx(const ipc::byte* data, size_t len, void* ctx) {
@@ -56,7 +56,7 @@ void test_ipc_link_basic() {
     
     // 5. Проверяем, что callback вызвался
     printf("test rx_called addr: %p\n", (void*)&rx_called);
-    // TEST_ASSERT_TRUE_MESSAGE(rx_called, "RX callback should be called");
+    TEST_ASSERT_TRUE_MESSAGE(rx_called, "RX callback should be called");
     
     // 6. Проверяем длину полученных данных
     TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg), rx_len, 
@@ -147,4 +147,85 @@ void test_ipc_link_manual_mode_cobs_without_crc() {
     TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg), rx_len, "RX length should match in manual COBS mode");
     TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(msg, rx_buf, sizeof(msg),
                                          "RX payload should match in manual COBS mode");
+}
+
+void test_ipc_link_can_fd_fragmentation_reassembles_large_payload() {
+    reset_test_state();
+
+    test::MockTransport transport;
+    using LargeLink = ipc::IPCLink<128, ipc::CRC16_CCITT>;
+    LargeLink::Config cfg = LargeLink::Config::for_can_fd();
+    LargeLink link(&transport, on_rx, nullptr, cfg);
+
+    ipc::byte msg[100];
+    for (size_t i = 0; i < sizeof(msg); ++i) {
+        msg[i] = static_cast<ipc::byte>(i + 1);
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(link.send(msg, sizeof(msg)),
+                             "CAN FD mode should fragment large payloads");
+    TEST_ASSERT_GREATER_THAN_MESSAGE(64, transport.tx_data().size(),
+                                     "Fragmented payload should occupy several physical frames");
+
+    const auto& tx = transport.tx_data();
+    size_t pos = 0;
+    while (pos < tx.size()) {
+        TEST_ASSERT_TRUE_MESSAGE(pos + 2 <= tx.size(), "Every fragment should have a length prefix");
+        size_t frame_len = (static_cast<size_t>(tx[pos]) << 8) | tx[pos + 1];
+        TEST_ASSERT_TRUE_MESSAGE(frame_len + 2 <= 64,
+                                 "Each CAN FD physical frame must fit into 64 bytes");
+        pos += frame_len + 2;
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(tx.size(), pos, "Fragment stream should end on frame boundary");
+
+    transport.feed_rx(tx);
+    link.process();
+
+    TEST_ASSERT_TRUE_MESSAGE(rx_called, "RX callback should be called after reassembly");
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg), rx_len, "Reassembled length should match");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(msg, rx_buf, sizeof(msg),
+                                         "Reassembled payload should match original");
+    TEST_ASSERT_GREATER_THAN_MESSAGE(1, link.stats().fragments_sent,
+                                     "TX fragment counter should be updated");
+    TEST_ASSERT_GREATER_THAN_MESSAGE(1, link.stats().fragments_received,
+                                     "RX fragment counter should be updated");
+}
+
+void test_ipc_link_tx_queue_flushes_on_process() {
+    reset_test_state();
+
+    test::MockTransport transport;
+    Link::Config cfg = Link::Config::manual(true, true, false, 0, true, false);
+    Link link(&transport, on_rx, nullptr, cfg);
+
+    const ipc::byte msg[] = {0x01, 0x02, 0x03};
+    TEST_ASSERT_TRUE_MESSAGE(link.send(msg, sizeof(msg)), "Queued TX send should succeed");
+    TEST_ASSERT_EQUAL_MESSAGE(1, link.pending_tx(), "Frame should be queued before process");
+    TEST_ASSERT_TRUE_MESSAGE(transport.tx_data().empty(), "Transport should not send before flush");
+
+    link.process();
+    TEST_ASSERT_EQUAL_MESSAGE(0, link.pending_tx(), "TX queue should be flushed by process");
+    TEST_ASSERT_FALSE_MESSAGE(transport.tx_data().empty(), "Transport should contain flushed frame");
+}
+
+void test_ipc_link_rx_queue_without_callback() {
+    reset_test_state();
+
+    test::MockTransport transport;
+    Link::Config cfg = Link::Config::manual(true, true, false, 0, false, true);
+    Link tx_link(&transport, nullptr, nullptr, cfg);
+
+    const ipc::byte msg[] = {0x55, 0x66, 0x77};
+    TEST_ASSERT_TRUE_MESSAGE(tx_link.send(msg, sizeof(msg)), "Send should succeed");
+    transport.feed_rx(transport.tx_data());
+    tx_link.process();
+
+    ipc::byte out[16] = {};
+    size_t out_len = 0;
+    TEST_ASSERT_EQUAL_MESSAGE(1, tx_link.available_rx(), "RX payload should be queued");
+    TEST_ASSERT_TRUE_MESSAGE(tx_link.receive(out, sizeof(out), &out_len),
+                             "Queued RX payload should be readable");
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(msg), out_len, "Queued RX length should match");
+    TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(msg, out, sizeof(msg),
+                                         "Queued RX payload should match");
 }

@@ -1,12 +1,11 @@
 {
   "name": "ipc",
   "version": "1.0.0",
-  "description": "Inter-Process Communication library",
-  "keywords": ["ipc", "communication", "embedded"],
+  "description": "Compact communication library for CAN FD, UART and RS-485",
+  "keywords": ["ipc", "communication", "can-fd", "uart", "rs485", "embedded"],
   "authors": [
     {
-      "name": "Your Name",
-      "email": "your@email.com"
+      "name": "communication_lib"
     }
   ],
   "license": "MIT",
